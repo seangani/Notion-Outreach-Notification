@@ -1,0 +1,27 @@
+name: Notion reach-out check
+
+on:
+  schedule:
+    # Every hour, 9am-5pm Eastern (13:00-21:00 UTC). Adjust for daylight saving
+    # or your own timezone — cron always runs in UTC.
+    - cron: '0 13-21 * * 1-5'
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install -r requirements.txt
+
+      - run: python check_reach_out.py
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TARGET_VALUES: ${{ vars.TARGET_VALUES }}
