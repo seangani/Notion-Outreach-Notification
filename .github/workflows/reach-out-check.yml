@@ -25,3 +25,4 @@ jobs:
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           TARGET_VALUES: ${{ vars.TARGET_VALUES }}
+          DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
