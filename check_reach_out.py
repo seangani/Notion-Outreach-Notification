@@ -1,3 +1,4 @@
+import json
 import os
 import requests
 
@@ -8,6 +9,13 @@ NTFY_TOPIC = os.environ["NTFY_TOPIC"]
 # Which values in the "When to followup?" column should trigger a ping.
 # Comma-separated, e.g. "REACH OUT,UPDATE CALL NOTES"
 TARGET_VALUES = [v.strip() for v in os.environ.get("TARGET_VALUES", "REACH OUT").split(",")]
+
+# Optional: only needed for the "Mark all as followed up" notification button.
+# A fine-grained GitHub token, scoped to just this repo, that's allowed to
+# trigger a repository_dispatch event. If it's not set, the button is skipped
+# and the notification still sends normally, just without the button.
+DISPATCH_TOKEN = os.environ.get("DISPATCH_TOKEN")
+GITHUB_REPO = "seangani/Notion-Outreach-Notification"
 
 NOTION_VERSION = "2022-06-28"
 
@@ -64,7 +72,7 @@ def query_due_rows():
             name = get_prop_text(props.get("Name"))
             company = get_prop_text(props.get("Company"))
             stat = get_prop_text(props.get("Stat"))
-            due.append(f"{name} ({company}) — {stat}")
+            due.append({"id": page["id"], "line": f"{name} ({company}) — {stat}"})
 
         if not data.get("has_more"):
             break
@@ -73,21 +81,44 @@ def query_due_rows():
     return due
 
 
-def send_ntfy(lines):
-    if not lines:
+def send_ntfy(due):
+    if not due:
         print("Nobody due for reach-out right now.")
         return
-    message = "\n".join(lines)
-    requests.post(
-        f"https://ntfy.sh/{NTFY_TOPIC}",
-        data=message.encode("utf-8"),
-        headers={
-            "Title": "Reach out today",
-            "Priority": "high",
-            "Tags": "email",
-        },
-    )
-    print(f"Pinged ntfy with {len(lines)} people due for reach-out.")
+
+    message = "\n".join(item["line"] for item in due)
+
+    payload = {
+        "topic": NTFY_TOPIC,
+        "title": "Reach out today",
+        "message": message,
+        "priority": 4,
+        "tags": ["email"],
+    }
+
+    if DISPATCH_TOKEN:
+        page_ids = [item["id"] for item in due]
+        payload["actions"] = [
+            {
+                "action": "http",
+                "label": "Mark all as followed up",
+                "url": f"https://api.github.com/repos/{GITHUB_REPO}/dispatches",
+                "method": "POST",
+                "headers": {
+                    "Authorization": f"Bearer {DISPATCH_TOKEN}",
+                    "Accept": "application/vnd.github+json",
+                    "Content-Type": "application/json",
+                },
+                "body": json.dumps({
+                    "event_type": "mark-followed-up",
+                    "client_payload": {"page_ids": page_ids},
+                }),
+                "clear": True,
+            }
+        ]
+
+    requests.post("https://ntfy.sh/", json=payload)
+    print(f"Pinged ntfy with {len(due)} people due for reach-out.")
 
 
 if __name__ == "__main__":
