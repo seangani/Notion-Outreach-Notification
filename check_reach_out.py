@@ -17,6 +17,8 @@ TARGET_VALUES = [v.strip() for v in os.environ.get("TARGET_VALUES", "REACH OUT")
 DISPATCH_TOKEN = os.environ.get("DISPATCH_TOKEN")
 GITHUB_REPO = "seangani/Notion-Outreach-Notification"
 
+print("DEBUG: DISPATCH_TOKEN was received:", bool(DISPATCH_TOKEN))
+
 NOTION_VERSION = "2022-06-28"
 
 
