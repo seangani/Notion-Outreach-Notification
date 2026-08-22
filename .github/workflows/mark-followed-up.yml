@@ -1,0 +1,22 @@
+name: Mark followed up
+
+on:
+  repository_dispatch:
+    types: [mark-followed-up]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install -r requirements.txt
+
+      - run: python mark_followed_up.py
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          PAGE_IDS: ${{ toJSON(github.event.client_payload.page_ids) }}
