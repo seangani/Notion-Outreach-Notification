@@ -28,12 +28,19 @@ def get_current_stat(page_id):
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     page = resp.json()
-    status = page["properties"]["Stat"]["status"]
-    return status["name"] if status else None
+    prop = page["properties"]["Stat"]
+    prop_type = prop["type"]  # e.g. "select" or "status" — read whichever it is
+    value = prop[prop_type]
+    name = value["name"] if value else None
+    return name, prop_type
 
 
 def advance_stage(page_id):
-    current_stat = get_current_stat(page_id)
+    # Always re-check the live value in Notion right now, rather than
+    # trusting whatever the stage was back when the notification was sent —
+    # this protects any manual edits you made in the meantime (e.g.
+    # changing someone to "LinkedIn Ghosted") from being overwritten.
+    current_stat, prop_type = get_current_stat(page_id)
     next_stat = NEXT_STAGE.get(current_stat)
     if next_stat is None:
         print(f"Skipping {page_id}: no next stage defined after '{current_stat}'")
@@ -45,7 +52,7 @@ def advance_stage(page_id):
         "Notion-Version": NOTION_VERSION,
         "Content-Type": "application/json",
     }
-    body = {"properties": {"Stat": {"status": {"name": next_stat}}}}
+    body = {"properties": {"Stat": {prop_type: {"name": next_stat}}}}
     resp = requests.patch(url, headers=headers, json=body)
     resp.raise_for_status()
     print(f"Moved {page_id} from '{current_stat}' to '{next_stat}'")
