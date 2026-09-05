@@ -19,4 +19,6 @@ jobs:
       - run: python mark_followed_up.py
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           PAGE_IDS: ${{ toJSON(github.event.client_payload.page_ids) }}
+          TARGET_STAT: ${{ github.event.client_payload.target_stat }}
