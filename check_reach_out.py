@@ -71,10 +71,12 @@ def query_due_rows():
 
         for page in data["results"]:
             props = page["properties"]
-            name = get_prop_text(props.get("Name"))
-            company = get_prop_text(props.get("Company"))
-            stat = get_prop_text(props.get("Stat"))
-            due.append({"id": page["id"], "line": f"{name} ({company}) — {stat}"})
+            due.append({
+                "id": page["id"],
+                "name": get_prop_text(props.get("Name")),
+                "company": get_prop_text(props.get("Company")),
+                "stat": get_prop_text(props.get("Stat")),
+            })
 
         if not data.get("has_more"):
             break
@@ -83,44 +85,53 @@ def query_due_rows():
     return due
 
 
+def dispatch_action(label, page_id, target_stat=None):
+    client_payload = {"page_ids": [page_id]}
+    if target_stat:
+        client_payload["target_stat"] = target_stat
+    return {
+        "action": "http",
+        "label": label,
+        "url": f"https://api.github.com/repos/{GITHUB_REPO}/dispatches",
+        "method": "POST",
+        "headers": {
+            "Authorization": f"Bearer {DISPATCH_TOKEN}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+        },
+        "body": json.dumps({
+            "event_type": "mark-followed-up",
+            "client_payload": client_payload,
+        }),
+        "clear": True,
+    }
+
+
 def send_ntfy(due):
     if not due:
         print("Nobody due for reach-out right now.")
         return
 
-    message = "\n".join(item["line"] for item in due)
+    for item in due:
+        title = f"Reach out: {item['name']} ({item['company']})" if item["company"] else f"Reach out: {item['name']}"
+        payload = {
+            "topic": NTFY_TOPIC,
+            "title": title,
+            "message": item["stat"] or "Due for reach-out",
+            "priority": 4,
+            "tags": ["email"],
+        }
 
-    payload = {
-        "topic": NTFY_TOPIC,
-        "title": "Reach out today",
-        "message": message,
-        "priority": 4,
-        "tags": ["email"],
-    }
+        if DISPATCH_TOKEN:
+            payload["actions"] = [
+                dispatch_action("Mark as followed up", item["id"]),
+                dispatch_action("Set up call", item["id"], target_stat="Call Scheduled"),
+            ]
 
-    if DISPATCH_TOKEN:
-        page_ids = [item["id"] for item in due]
-        payload["actions"] = [
-            {
-                "action": "http",
-                "label": "Mark all as followed up",
-                "url": f"https://api.github.com/repos/{GITHUB_REPO}/dispatches",
-                "method": "POST",
-                "headers": {
-                    "Authorization": f"Bearer {DISPATCH_TOKEN}",
-                    "Accept": "application/vnd.github+json",
-                    "Content-Type": "application/json",
-                },
-                "body": json.dumps({
-                    "event_type": "mark-followed-up",
-                    "client_payload": {"page_ids": page_ids},
-                }),
-                "clear": True,
-            }
-        ]
+        resp = requests.post("https://ntfy.sh/", json=payload)
+        resp.raise_for_status()
 
-    requests.post("https://ntfy.sh/", json=payload)
-    print(f"Pinged ntfy with {len(due)} people due for reach-out.")
+    print(f"Pinged ntfy with {len(due)} separate notifications.")
 
 
 if __name__ == "__main__":
