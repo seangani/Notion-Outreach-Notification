@@ -4,6 +4,7 @@ import os
 import requests
 
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
+NTFY_TOPIC = os.environ["NTFY_TOPIC"]
 PAGE_IDS = json.loads(os.environ["PAGE_IDS"])
 
 # Optional: when set (e.g. "Call Scheduled" from the "Set up call" button),
@@ -32,11 +33,24 @@ def get_current_stat(page_id):
     resp = requests.get(url, headers=headers)
     resp.raise_for_status()
     page = resp.json()
-    prop = page["properties"]["Stat"]
-    prop_type = prop["type"]  # e.g. "select" or "status" — read whichever it is
-    value = prop[prop_type]
-    name = value["name"] if value else None
-    return name, prop_type
+    props = page["properties"]
+
+    stat_prop = props["Stat"]
+    prop_type = stat_prop["type"]  # e.g. "select" or "status" — read whichever it is
+    value = stat_prop[prop_type]
+    current_stat = value["name"] if value else None
+
+    title_prop = props.get("Name", {})
+    person_name = "".join(t["plain_text"] for t in title_prop.get("title", []))
+
+    return current_stat, prop_type, person_name
+
+
+def notify(message, tag):
+    requests.post(
+        "https://ntfy.sh/",
+        json={"topic": NTFY_TOPIC, "title": "Reach-out update", "message": message, "tags": [tag]},
+    )
 
 
 def set_stat(page_id, current_stat, next_stat, prop_type):
@@ -57,20 +71,28 @@ def advance_stage(page_id):
     # trusting whatever the stage was back when the notification was sent —
     # this protects any manual edits you made in the meantime (e.g.
     # changing someone to "LinkedIn Ghosted") from being overwritten.
-    current_stat, prop_type = get_current_stat(page_id)
+    current_stat, prop_type, person_name = get_current_stat(page_id)
 
     if TARGET_STAT is not None:
         set_stat(page_id, current_stat, TARGET_STAT, prop_type)
+        notify(f"{person_name}: now '{TARGET_STAT}'", "white_check_mark")
         return
 
     next_stat = NEXT_STAGE.get(current_stat)
     if next_stat is None:
         print(f"Skipping {page_id}: no next stage defined after '{current_stat}'")
+        notify(f"{person_name}: nothing to advance to after '{current_stat}'", "warning")
         return
 
     set_stat(page_id, current_stat, next_stat, prop_type)
+    notify(f"{person_name}: '{current_stat}' -> '{next_stat}'", "white_check_mark")
 
 
 if __name__ == "__main__":
     for page_id in PAGE_IDS:
-        advance_stage(page_id)
+        try:
+            advance_stage(page_id)
+        except Exception as e:
+            notify(f"Failed to update page {page_id}: {e}", "x")
+            raise
+
