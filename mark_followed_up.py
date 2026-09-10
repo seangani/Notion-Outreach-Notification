@@ -1,7 +1,6 @@
 import json
 import os
-
-import requests
+import urllib.request
 
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
 NTFY_TOPIC = os.environ["NTFY_TOPIC"]
@@ -14,9 +13,8 @@ TARGET_STAT = os.environ.get("TARGET_STAT") or None
 NOTION_VERSION = "2022-06-28"
 
 # Where each stage moves to when you tap "Mark all as followed up."
-# Anything not listed here (e.g. "Last Try", "LinkedIn Ghosted", "Call
-# Scheduled") is left untouched on purpose, rather than guessing what
-# should come next.
+# Anything not listed here (e.g. "LinkedIn Ghosted", "Call Scheduled") is
+# left untouched on purpose, rather than guessing what should come next.
 NEXT_STAGE = {
     "First Outreach": "Followup",
     "Followup": "2nd Followup",
@@ -25,15 +23,22 @@ NEXT_STAGE = {
 }
 
 
-def get_current_stat(page_id):
-    url = f"https://api.notion.com/v1/pages/{page_id}"
+def notion_request(method, url, body=None):
     headers = {
         "Authorization": f"Bearer {NOTION_TOKEN}",
         "Notion-Version": NOTION_VERSION,
     }
-    resp = requests.get(url, headers=headers)
-    resp.raise_for_status()
-    page = resp.json()
+    data = None
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+
+
+def get_current_stat(page_id):
+    page = notion_request("GET", f"https://api.notion.com/v1/pages/{page_id}")
     props = page["properties"]
 
     stat_prop = props["Stat"]
@@ -48,22 +53,24 @@ def get_current_stat(page_id):
 
 
 def notify(message, tag):
-    requests.post(
+    data = json.dumps({
+        "topic": NTFY_TOPIC,
+        "title": "Reach-out update",
+        "message": message,
+        "tags": [tag],
+    }).encode("utf-8")
+    req = urllib.request.Request(
         "https://ntfy.sh/",
-        json={"topic": NTFY_TOPIC, "title": "Reach-out update", "message": message, "tags": [tag]},
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
+    urllib.request.urlopen(req)
 
 
 def set_stat(page_id, current_stat, next_stat, prop_type):
-    url = f"https://api.notion.com/v1/pages/{page_id}"
-    headers = {
-        "Authorization": f"Bearer {NOTION_TOKEN}",
-        "Notion-Version": NOTION_VERSION,
-        "Content-Type": "application/json",
-    }
     body = {"properties": {"Stat": {prop_type: {"name": next_stat}}}}
-    resp = requests.patch(url, headers=headers, json=body)
-    resp.raise_for_status()
+    notion_request("PATCH", f"https://api.notion.com/v1/pages/{page_id}", body)
     print(f"Moved {page_id} from '{current_stat}' to '{next_stat}'")
 
 
@@ -96,4 +103,3 @@ if __name__ == "__main__":
         except Exception as e:
             notify(f"Failed to update page {page_id}: {e}", "x")
             raise
-
