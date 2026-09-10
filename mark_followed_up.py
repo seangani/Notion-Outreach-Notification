@@ -21,6 +21,7 @@ NEXT_STAGE = {
     "First Outreach": "Followup",
     "Followup": "2nd Followup",
     "2nd Followup": "Last Try",
+    "Last Try": "Dead",
 }
 
 
