@@ -126,6 +126,7 @@ def send_ntfy(due):
             payload["actions"] = [
                 dispatch_action("Mark as followed up", item["id"]),
                 dispatch_action("Set up call", item["id"], target_stat="Call Scheduled"),
+                dispatch_action("Ghosted on Linkdin", item["id"], target_stat="Ghosted on Linkdin"),
             ]
 
         resp = requests.post("https://ntfy.sh/", json=payload)
