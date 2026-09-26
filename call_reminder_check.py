@@ -1,30 +1,32 @@
+"""
+Checks the "Linkdin Outreach" Notion database for calls coming up within the
+hour (the "When to followup?" formula shows "CALL REMINDER" for these — see
+README) and sends one ntfy push per call, with buttons to log the outcome
+once it's done.
+
+Only pings once per call: after sending, this sets "Call Reminder Sent" so
+re-runs within the same hour don't duplicate the notification.
+"""
 import json
 import os
+
 import requests
 
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
 DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
 NTFY_TOPIC = os.environ["NTFY_TOPIC"]
 
-# Which values in the "When to followup?" column should trigger a ping.
-# Comma-separated, e.g. "REACH OUT,UPDATE CALL NOTES"
-TARGET_VALUES = [v.strip() for v in os.environ.get("TARGET_VALUES", "REACH OUT").split(",")]
-
-# Optional: only needed for the "Mark all as followed up" notification button.
-# A fine-grained GitHub token, scoped to just this repo, that's allowed to
-# trigger a repository_dispatch event. If it's not set, the button is skipped
-# and the notification still sends normally, just without the button.
+# Optional: same fine-grained GitHub token as check_reach_out.py, allowed to
+# trigger a repository_dispatch event. If not set, the notification still
+# sends, just without the outcome buttons.
 DISPATCH_TOKEN = os.environ.get("DISPATCH_TOKEN")
 GITHUB_REPO = "seangani/Notion-Outreach-Notification"
-
-print("DEBUG: DISPATCH_TOKEN was received:", bool(DISPATCH_TOKEN))
 
 NOTION_VERSION = "2022-06-28"
 
 
 def get_prop_text(prop):
     """Pull a human-readable string out of any Notion property, regardless of its type."""
-    #This code below is needed to skip this logic since there is no data pull till the bottom chunks
     if prop is None:
         return ""
     prop_type = prop.get("type")
@@ -36,14 +38,12 @@ def get_prop_text(prop):
         return prop["select"]["name"] if prop["select"] else ""
     if prop_type == "status":
         return prop["status"]["name"] if prop["status"] else ""
-    if prop_type == "multi_select":
-        return ", ".join(o["name"] for o in prop["multi_select"])
     if prop_type == "formula" and prop["formula"]["type"] == "string":
         return prop["formula"]["string"] or ""
     return ""
 
 
-def query_due_rows():
+def query_due_calls():
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
     headers = {
         "Authorization": f"Bearer {NOTION_TOKEN}",
@@ -52,9 +52,9 @@ def query_due_rows():
     }
     payload = {
         "filter": {
-            "or": [
-                {"property": "When to followup?", "formula": {"string": {"equals": value}}}
-                for value in TARGET_VALUES
+            "and": [
+                {"property": "When to followup?", "formula": {"string": {"equals": "CALL REMINDER"}}},
+                {"property": "Call Reminder Sent", "checkbox": {"equals": False}},
             ]
         }
     }
@@ -75,7 +75,6 @@ def query_due_rows():
                 "id": page["id"],
                 "name": get_prop_text(props.get("Name")),
                 "company": get_prop_text(props.get("Company")),
-                "stat": get_prop_text(props.get("Stat")),
             })
 
         if not data.get("has_more"):
@@ -85,10 +84,20 @@ def query_due_rows():
     return due
 
 
-def dispatch_action(label, page_id, target_stat=None):
-    client_payload = {"page_ids": [page_id]}
-    if target_stat:
-        client_payload["target_stat"] = target_stat
+def mark_reminder_sent(page_id):
+    resp = requests.patch(
+        f"https://api.notion.com/v1/pages/{page_id}",
+        headers={
+            "Authorization": f"Bearer {NOTION_TOKEN}",
+            "Notion-Version": NOTION_VERSION,
+            "Content-Type": "application/json",
+        },
+        json={"properties": {"Call Reminder Sent": {"checkbox": True}}},
+    )
+    resp.raise_for_status()
+
+
+def dispatch_action(label, page_id, target_stat):
     return {
         "action": "http",
         "label": label,
@@ -101,7 +110,7 @@ def dispatch_action(label, page_id, target_stat=None):
         },
         "body": json.dumps({
             "event_type": "mark-followed-up",
-            "client_payload": client_payload,
+            "client_payload": {"page_ids": [page_id], "target_stat": target_stat},
         }),
         "clear": True,
     }
@@ -109,31 +118,32 @@ def dispatch_action(label, page_id, target_stat=None):
 
 def send_ntfy(due):
     if not due:
-        print("Nobody due for reach-out right now.")
+        print("No calls due for a reminder right now.")
         return
 
     for item in due:
-        title = f"Reach out: {item['name']} ({item['company']})" if item["company"] else f"Reach out: {item['name']}"
+        title = f"Call soon: {item['name']} ({item['company']})" if item["company"] else f"Call soon: {item['name']}"
         payload = {
             "topic": NTFY_TOPIC,
             "title": title,
-            "message": item["stat"] or "Due for reach-out",
-            "priority": 4,
-            "tags": ["email"],
+            "message": "Coming up within the hour",
+            "priority": 5,
+            "tags": ["telephone_receiver"],
         }
 
         if DISPATCH_TOKEN:
             payload["actions"] = [
-                dispatch_action("Mark as followed up", item["id"]),
-                dispatch_action("Set up call", item["id"], target_stat="Call"),
-                dispatch_action("Ghosted on Linkdin", item["id"], target_stat="Ghosted on Linkdin"),
+                dispatch_action("Call finished", item["id"], "Call finished"),
+                dispatch_action("Resource for Fulltime", item["id"], "Resource for Fulltime"),
+                dispatch_action("Sent Resume", item["id"], "Sent Resume"),
             ]
 
         resp = requests.post("https://ntfy.sh/", json=payload)
         resp.raise_for_status()
+        mark_reminder_sent(item["id"])
 
-    print(f"Pinged ntfy with {len(due)} separate notifications.")
+    print(f"Pinged ntfy with {len(due)} call reminder(s).")
 
 
 if __name__ == "__main__":
-    send_ntfy(query_due_rows())
+    send_ntfy(query_due_calls())

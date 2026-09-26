@@ -43,6 +43,32 @@ says REACH OUT.
    - Check your phone for a push notification (or the Actions log for
      "Nobody due for reach-out right now.")
 
-After that, it runs automatically every hour, 9am-5pm ET, Monday-Friday —
-see the cron schedule in `.github/workflows/reach-out-check.yml` if you want
+After that, it runs automatically once a day, weekdays at 12:07 UTC — see
+the cron schedule in `.github/workflows/reach-out-check.yml` if you want
 to change the timing.
+
+## Call reminders
+
+A second, independent check: pings you ~1 hour before a scheduled call, and
+lets you log the outcome (Call finished / Resource for Fulltime / Sent
+Resume) straight from the notification.
+
+### Setup
+
+1. **Add two properties to the Notion database**
+   - `Call Time` — a Date property, with "include time" turned on
+   - `Call Reminder Sent` — a Checkbox property (bookkeeping only, so you
+     don't get pinged twice for the same call)
+
+2. **Update the "When to followup?" formula** to flip to `CALL REMINDER`
+   when `Stat` is `"Call"` and `Call Time` is within the next hour.
+
+3. **Use it**: set someone's `Stat` to `Call` and fill in `Call Time`
+   whenever you schedule a call (e.g. by asking Claude, if it's connected
+   to this Notion workspace, to do it for you). Nothing else to configure —
+   this check reuses the same `NOTION_TOKEN`, `NTFY_TOPIC`, and
+   `DISPATCH_TOKEN` secrets as the reach-out check above.
+
+Runs automatically every hour (all day, every day — calls aren't limited to
+weekday business hours) at :07 past the hour, via
+`.github/workflows/call-reminder-check.yml`.
