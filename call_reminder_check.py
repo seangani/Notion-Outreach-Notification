@@ -4,7 +4,7 @@ hour (the "When to followup?" formula shows "CALL REMINDER" for these — see
 README) and sends one ntfy push per call, with buttons to log the outcome
 once it's done.
 
-Only pings once per call: after sending, this sets "Call Reminder Sent" so
+Only pings once per call: after sending, this sets "Call reminder set" so
 re-runs within the same hour don't duplicate the notification.
 """
 import json
@@ -54,7 +54,7 @@ def query_due_calls():
         "filter": {
             "and": [
                 {"property": "When to followup?", "formula": {"string": {"equals": "CALL REMINDER"}}},
-                {"property": "Call Reminder Sent", "checkbox": {"equals": False}},
+                {"property": "Call reminder set", "checkbox": {"equals": False}},
             ]
         }
     }
@@ -92,7 +92,7 @@ def mark_reminder_sent(page_id):
             "Notion-Version": NOTION_VERSION,
             "Content-Type": "application/json",
         },
-        json={"properties": {"Call Reminder Sent": {"checkbox": True}}},
+        json={"properties": {"Call reminder set": {"checkbox": True}}},
     )
     resp.raise_for_status()
 

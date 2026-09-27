@@ -57,7 +57,7 @@ Resume) straight from the notification.
 
 1. **Add two properties to the Notion database**
    - `Call Time` — a Date property, with "include time" turned on
-   - `Call Reminder Sent` — a Checkbox property (bookkeeping only, so you
+   - `Call reminder set` — a Checkbox property (bookkeeping only, so you
      don't get pinged twice for the same call)
 
 2. **Update the "When to followup?" formula** to flip to `CALL REMINDER`
