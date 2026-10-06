@@ -7,3 +7,6 @@ crons = [
   "0 16,17 * * 1-5", # reach-out: fires at both; the code sends only at 12pm New York time
   "7 * * * *",       # call reminder check: hourly at :07
 ]
+
+[observability]
+enabled = true
