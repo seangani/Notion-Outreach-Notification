@@ -1,17 +1,16 @@
 name: Notion reach-out check
 
 on:
-  schedule:
-    # Once a day, weekdays, at 12:07 UTC (~8:07am Eastern). The :07 offset
-    # is deliberate — GitHub Actions schedules queue up right at :00, so
-    # off-the-hour minutes run closer to on-time. Adjust for daylight
-    # saving or your own timezone — cron always runs in UTC.
-    - cron: '7 12 * * 1-5'
+  # Triggered on time by the Cloudflare Worker in worker/ (GitHub's own
+  # cron runs hours late). See worker/src/index.js.
+  repository_dispatch:
+    types: [run-reach-out]
   workflow_dispatch: {}
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 

@@ -1,19 +1,16 @@
 name: Call reminder check
 
 on:
-  schedule:
-    # Once an hour, every day, at :07 past the hour — not on the hour, to
-    # avoid GitHub's top-of-hour scheduling congestion (see
-    # reach-out-check.yml for the same reasoning). Hourly is deliberate:
-    # the "CALL REMINDER" formula window is ~1 hour wide, so an hourly
-    # check will always land inside it once, without needing to poll every
-    # few minutes (and risk spamming your phone if something misfires).
-    - cron: '7 * * * *'
+  # Triggered on time by the Cloudflare Worker in worker/ (GitHub's own
+  # cron runs hours late). See worker/src/index.js.
+  repository_dispatch:
+    types: [run-call-reminder]
   workflow_dispatch: {}
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 

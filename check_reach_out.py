@@ -8,7 +8,7 @@ NTFY_TOPIC = os.environ["NTFY_TOPIC"]
 
 # Which values in the "When to followup?" column should trigger a ping.
 # Comma-separated, e.g. "REACH OUT,UPDATE CALL NOTES"
-TARGET_VALUES = [v.strip() for v in os.environ.get("TARGET_VALUES", "REACH OUT").split(",")]
+TARGET_VALUES = [v.strip() for v in (os.environ.get("TARGET_VALUES") or "REACH OUT").split(",") if v.strip()]
 
 # Optional: only needed for the "Mark all as followed up" notification button.
 # A fine-grained GitHub token, scoped to just this repo, that's allowed to
